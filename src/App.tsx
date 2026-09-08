@@ -1,4 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { FaWhatsapp, FaInstagram } from "react-icons/fa";
+import { FaLocationDot } from "react-icons/fa6";
+
+const WHATSAPP_NUMBER = "5568992403062";
 
 const IMG = {
   hero: "https://images.unsplash.com/photo-1646072508214-b88d6b1677c3?w=900&h=1200&fit=crop&auto=format",
@@ -385,7 +389,11 @@ function Hero() {
 
         <div className="flex flex-wrap gap-4 mb-14">
           <a
-            href="#contato"
+            href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
+              "Olá, Lucas! Vim pelo site e gostaria de começar meu treinamento.",
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-3"
             style={{
               background: "#c8ff00",
@@ -1618,7 +1626,11 @@ function Planos() {
                 </div>
 
                 <a
-                  href="#contato"
+                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
+                    `Olá, Lucas! Tenho interesse no plano ${p.name}. Gostaria de saber mais detalhes.`,
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="block text-center transition-all duration-250"
                   style={{
                     background: p.highlight ? "#080808" : "#c8ff00",
@@ -1860,7 +1872,11 @@ function CTAFinal() {
             Seu próximo nível começa com o primeiro treino.
           </p>
           <a
-            href="#contato"
+            href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
+              "Olá, Lucas! Tenho interesse em começar meu treinamento. Gostaria de saber mais detalhes.",
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-4 transition-all duration-300"
             style={{
               background: "#c8ff00",
@@ -1903,13 +1919,20 @@ function Contato() {
   const [sent, setSent] = useState(false);
   const [form, setForm] = useState({
     nome: "",
-    telefone: "",
     plano: "",
-    objetivo: "",
   });
 
   const handle = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const message = `Olá, Lucas! Vim pelo seu site e gostaria de fazer uma avaliação.\n\nNome: ${form.nome}\nPlano de interesse: ${form.plano}`;
+
+    const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
+      message,
+    )}`;
+
+    window.open(whatsappUrl, "_blank");
+
     setSent(true);
   };
 
@@ -1944,14 +1967,26 @@ function Contato() {
               marginBottom: "40px",
             }}
           >
-            Preencha o formulário e em até 24h entro em contato para agendar sua
-            avaliação gratuita.
+            Preencha seu nome e escolha o plano de interesse. Ao enviar, você
+            será direcionado para o WhatsApp.
           </p>
           <div className="flex flex-col gap-5">
             {[
-              { icon: "📱", label: "WHATSAPP", val: "+55 (11) 99999-0000" },
-              { icon: "📸", label: "INSTAGRAM", val: "@lucasferreira.pt" },
-              { icon: "📍", label: "LOCALIZAÇÃO", val: "São Paulo, SP" },
+              {
+                icon: <FaWhatsapp />,
+                label: "WHATSAPP",
+                val: "+55 (68) 99240-3062",
+              },
+              {
+                icon: <FaInstagram />,
+                label: "INSTAGRAM",
+                val: "@lucasferreira.pt",
+              },
+              {
+                icon: <FaLocationDot />,
+                label: "LOCALIZAÇÃO",
+                val: "Rio Branco, AC",
+              },
             ].map(({ icon, label, val }) => (
               <div key={label} className="flex items-center gap-5">
                 <div
@@ -2027,12 +2062,6 @@ function Contato() {
                   type: "text",
                   ph: "Seu nome",
                 },
-                {
-                  id: "telefone",
-                  label: "WHATSAPP",
-                  type: "tel",
-                  ph: "(11) 99999-0000",
-                },
               ].map(({ id, label, type, ph }) => (
                 <div key={id} className="flex flex-col gap-2">
                   <label
@@ -2081,16 +2110,6 @@ function Contato() {
                     "Starter (R$ 290/mês)",
                     "Pro (R$ 490/mês)",
                     "Elite (R$ 790/mês)",
-                  ],
-                },
-                {
-                  id: "objetivo",
-                  label: "OBJETIVO PRINCIPAL",
-                  opts: [
-                    "Hipertrofia",
-                    "Emagrecimento",
-                    "Condicionamento",
-                    "Performance",
                   ],
                 },
               ].map(({ id, label, opts }) => (
