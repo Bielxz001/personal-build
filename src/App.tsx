@@ -326,6 +326,14 @@ function Navbar() {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open]);
+
+  useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 50);
     window.addEventListener("scroll", fn);
     return () => window.removeEventListener("scroll", fn);
@@ -466,12 +474,15 @@ function Navbar() {
 
       <div
         id="mobile-menu"
-        className="fixed inset-0 z-40 xl:hidden flex flex-col justify-center items-center gap-7 transition-all duration-500"
+        className="fixed inset-0 z-40 xl:hidden flex flex-col justify-start items-center gap-7 overflow-y-auto overscroll-contain transition-all duration-500"
         style={{
           background: "#080808",
           opacity: open ? 1 : 0,
           pointerEvents: open ? "auto" : "none",
           transform: open ? "translateY(0)" : "translateY(-16px)",
+          paddingTop: "110px",
+          paddingBottom: "40px",
+          WebkitOverflowScrolling: "touch",
         }}
       >
         {links.map((l, i) => (
