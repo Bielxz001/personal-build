@@ -1,9 +1,22 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  type ReactNode,
+  type FormEvent,
+} from "react";
 import { FaWhatsapp, FaInstagram } from "react-icons/fa";
 import { FaLocationDot } from "react-icons/fa6";
 
 const WHATSAPP_NUMBER = "5568992403062";
+const INSTAGRAM_URL = "https://instagram.com/lucasferreira.pt";
 
+const whatsappLink = (message: string) =>
+  `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+
+// IMPORTANTE: antes de publicar, troque as imagens genéricas pelos arquivos reais do treinador e dos alunos.
+// As fotos de antes/depois devem ser do MESMO aluno e usadas com autorização.
 const IMG = {
   hero: "https://images.unsplash.com/photo-1646072508214-b88d6b1677c3?w=900&h=1200&fit=crop&auto=format",
   about:
@@ -22,8 +35,6 @@ const IMG = {
     "https://images.unsplash.com/photo-1604480133435-25b86862d276?w=600&h=800&fit=crop&auto=format",
   gallery2:
     "https://images.unsplash.com/photo-1616279969722-d81a5a3944ef?w=600&h=400&fit=crop&auto=format",
-  gallery3:
-    "https://images.unsplash.com/photo-1738725602689-f260e7f528cd?w=400&h=500&fit=crop&auto=format",
   before1:
     "https://images.unsplash.com/photo-1577221084712-45b0445d2b00?w=600&h=800&fit=crop&auto=format&grayscale",
   after1:
@@ -71,7 +82,7 @@ function FadeUp({
   delay = 0,
   className = "",
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   delay?: number;
   className?: string;
 }) {
@@ -91,38 +102,205 @@ function FadeUp({
   );
 }
 
-function AnimatedNumber({
-  target,
-  suffix = "",
+function BeforeAfterSlider({
+  before,
+  after,
+  height = 440,
 }: {
-  target: number;
-  suffix?: string;
+  before: string;
+  after: string;
+  height?: number;
 }) {
-  const [count, setCount] = useState(0);
-  const { ref, visible } = useInView(0.5);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState(50);
+  const dragging = useRef(false);
+
+  const updatePosition = useCallback((clientX: number) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const next = ((clientX - rect.left) / rect.width) * 100;
+    setPos(Math.min(100, Math.max(0, next)));
+  }, []);
+
+  const startDrag = useCallback(
+    (clientX: number) => {
+      dragging.current = true;
+      updatePosition(clientX);
+    },
+    [updatePosition],
+  );
+
+  const onMouseMove = useCallback(
+    (event: MouseEvent) => {
+      if (dragging.current) updatePosition(event.clientX);
+    },
+    [updatePosition],
+  );
+
+  const onTouchMove = useCallback(
+    (event: TouchEvent) => {
+      if (dragging.current) updatePosition(event.touches[0].clientX);
+    },
+    [updatePosition],
+  );
+
+  const stopDrag = useCallback(() => {
+    dragging.current = false;
+  }, []);
+
   useEffect(() => {
-    if (!visible) return;
-    let start = 0;
-    const step = Math.ceil(target / 60);
-    const timer = setInterval(() => {
-      start += step;
-      if (start >= target) {
-        setCount(target);
-        clearInterval(timer);
-      } else setCount(start);
-    }, 18);
-    return () => clearInterval(timer);
-  }, [visible, target]);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", stopDrag);
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    window.addEventListener("touchend", stopDrag);
+
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", stopDrag);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", stopDrag);
+    };
+  }, [onMouseMove, onTouchMove, stopDrag]);
+
   return (
-    <span ref={ref}>
-      {count}
-      {suffix}
-    </span>
+    <div
+      ref={containerRef}
+      className="relative overflow-hidden select-none"
+      style={{
+        height: `${height}px`,
+        background: "#111",
+        touchAction: "none",
+        cursor: "ew-resize",
+      }}
+      role="slider"
+      tabIndex={0}
+      aria-label="Comparar antes e depois"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(pos)}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+          e.preventDefault();
+          setPos((current) => Math.max(0, current - 5));
+        }
+        if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+          e.preventDefault();
+          setPos((current) => Math.min(100, current + 5));
+        }
+        if (e.key === "Home") {
+          e.preventDefault();
+          setPos(0);
+        }
+        if (e.key === "End") {
+          e.preventDefault();
+          setPos(100);
+        }
+      }}
+      onMouseDown={(e) => startDrag(e.clientX)}
+      onTouchStart={(e) => startDrag(e.touches[0].clientX)}
+    >
+      <img
+        src={after}
+        alt="Depois da transformação"
+        className="absolute inset-0 w-full h-full object-contain"
+        style={{ background: "#111", filter: "brightness(0.9)" }}
+        draggable={false}
+      />
+
+      <img
+        src={before}
+        alt="Antes da transformação"
+        className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+        style={{
+          background: "#111",
+          filter: "brightness(0.68) saturate(0.3)",
+          clipPath: `polygon(0 0, ${pos}% 0, ${pos}% 100%, 0 100%)`,
+        }}
+        draggable={false}
+      />
+
+      <div
+        className="absolute top-0 bottom-0 w-px pointer-events-none"
+        style={{
+          left: `${pos}%`,
+          background: "#c8ff00",
+          boxShadow: "0 0 14px rgba(200,255,0,0.55)",
+        }}
+      >
+        <div
+          className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
+          style={{
+            width: "46px",
+            height: "46px",
+            background: "#c8ff00",
+            borderRadius: "50%",
+            boxShadow: "0 0 22px rgba(200,255,0,0.45)",
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path
+              d="M6 10h8M3 7l-3 3 3 3M17 7l3 3-3 3"
+              stroke="#080808"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+      </div>
+
+      <span
+        className="absolute top-4 left-4 pointer-events-none"
+        style={{
+          background: "rgba(0,0,0,0.78)",
+          color: "#f5f5f5",
+          padding: "6px 10px",
+          fontFamily: "'Barlow Condensed', sans-serif",
+          fontSize: "0.62rem",
+          fontWeight: 700,
+          letterSpacing: "0.14em",
+        }}
+      >
+        ANTES
+      </span>
+
+      <span
+        className="absolute top-4 right-4 pointer-events-none"
+        style={{
+          background: "rgba(200,255,0,0.14)",
+          color: "#c8ff00",
+          border: "1px solid rgba(200,255,0,0.25)",
+          padding: "6px 10px",
+          fontFamily: "'Barlow Condensed', sans-serif",
+          fontSize: "0.62rem",
+          fontWeight: 700,
+          letterSpacing: "0.14em",
+        }}
+      >
+        DEPOIS
+      </span>
+
+      <div
+        className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none"
+        style={{
+          background: "rgba(0,0,0,0.72)",
+          color: "#aaa",
+          padding: "7px 12px",
+          fontFamily: "'Barlow Condensed', sans-serif",
+          fontSize: "0.58rem",
+          fontWeight: 700,
+          letterSpacing: "0.12em",
+          whiteSpace: "nowrap",
+        }}
+      >
+        ARRASTE PARA COMPARAR
+      </div>
+    </div>
   );
 }
 
 // ─── Label chip ───────────────────────────────────────────────────────────
-function Label({ children }: { children: React.ReactNode }) {
+function Label({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center gap-3 mb-5">
       <div className="w-5 h-px" style={{ background: "#c8ff00" }} />
@@ -159,7 +337,9 @@ function Navbar() {
     { label: "MÉTODO", href: "#metodo" },
     { label: "TREINOS", href: "#treinos" },
     { label: "RESULTADOS", href: "#resultados" },
+    { label: "MODALIDADES", href: "#modalidades" },
     { label: "PLANOS", href: "#planos" },
+    { label: "FAQ", href: "#faq" },
     { label: "CONTATO", href: "#contato" },
   ];
 
@@ -207,7 +387,7 @@ function Navbar() {
             </span>
           </a>
 
-          <div className="hidden lg:flex items-center gap-7">
+          <div className="hidden xl:flex items-center gap-6">
             {links.map((l) => (
               <a
                 key={l.label}
@@ -231,7 +411,7 @@ function Navbar() {
           <div className="flex items-center gap-4">
             <a
               href="#planos"
-              className="hidden md:block"
+              className="hidden xl:block"
               style={{
                 background: "#c8ff00",
                 color: "#080808",
@@ -255,9 +435,12 @@ function Navbar() {
               VER PLANOS
             </a>
             <button
-              className="lg:hidden p-2 flex flex-col gap-1.5"
+              className="xl:hidden p-2 flex flex-col gap-1.5"
               onClick={() => setOpen(!open)}
-              aria-label="Menu"
+              type="button"
+              aria-label={open ? "Fechar menu" : "Abrir menu"}
+              aria-expanded={open}
+              aria-controls="mobile-menu"
             >
               {[0, 1, 2].map((i) => (
                 <span
@@ -282,7 +465,8 @@ function Navbar() {
       </nav>
 
       <div
-        className="fixed inset-0 z-40 lg:hidden flex flex-col justify-center items-center gap-7 transition-all duration-500"
+        id="mobile-menu"
+        className="fixed inset-0 z-40 xl:hidden flex flex-col justify-center items-center gap-7 transition-all duration-500"
         style={{
           background: "#080808",
           opacity: open ? 1 : 0,
@@ -297,7 +481,7 @@ function Navbar() {
             className="font-black uppercase transition-colors duration-200"
             style={{
               fontFamily: "'Barlow Condensed', sans-serif",
-              fontSize: "3.2rem",
+              fontSize: "clamp(2.4rem, 10vw, 3.2rem)",
               color: open ? "#f5f5f5" : "#111",
               transitionDelay: `${i * 0.04}s`,
             }}
@@ -349,7 +533,7 @@ function Hero() {
         <h1
           style={{
             fontFamily: "'Barlow Condensed', sans-serif",
-            fontSize: "clamp(4.5rem, 13vw, 10rem)",
+            fontSize: "clamp(3.7rem, 14vw, 10rem)",
             fontWeight: 900,
             lineHeight: 0.9,
             letterSpacing: "-0.01em",
@@ -383,15 +567,15 @@ function Hero() {
             maxWidth: "400px",
           }}
         >
-          Treinamento personalizado para quem quer evoluir de verdade. Método,
-          ciência e acompanhamento total.
+          Para quem quer emagrecer, ganhar massa, melhorar o condicionamento ou
+          voltar a treinar com direção. Método, estratégia e acompanhamento.
         </p>
 
         <div className="flex flex-wrap gap-4 mb-14">
           <a
-            href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
-              "Olá, Lucas! Vim pelo site e gostaria de começar meu treinamento.",
-            )}`}
+            href={whatsappLink(
+              "Olá, Lucas! Vim pelo site e quero entender como funciona o treinamento.",
+            )}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-3"
@@ -415,7 +599,7 @@ function Hero() {
               e.currentTarget.style.boxShadow = "";
             }}
           >
-            COMEÇAR AGORA
+            QUERO SABER MAIS
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
               <path
                 d="M3 7.5h9M9 4l3.5 3.5L9 11"
@@ -450,6 +634,33 @@ function Hero() {
           >
             CONHECER O MÉTODO
           </a>
+          <a
+            href={INSTAGRAM_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-3"
+            style={{
+              border: "1px solid #2a2a2a",
+              color: "#f5f5f5",
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontWeight: 900,
+              fontSize: "0.8rem",
+              letterSpacing: "0.1em",
+              padding: "16px 24px",
+              transition: "all 0.25s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "#c8ff00";
+              e.currentTarget.style.color = "#c8ff00";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "#2a2a2a";
+              e.currentTarget.style.color = "#f5f5f5";
+            }}
+          >
+            <FaInstagram />
+            SEGUIR NO INSTAGRAM
+          </a>
         </div>
 
         <div
@@ -457,30 +668,30 @@ function Hero() {
           style={{ borderTop: "1px solid #181818", paddingTop: "40px" }}
         >
           {[
-            { val: 500, suffix: "+", label: "ALUNOS" },
-            { val: 5, suffix: " ANOS", label: "EXPERIÊNCIA" },
-            { val: 100, suffix: "%", label: "PERSONALIZADO" },
-          ].map(({ val, suffix, label }) => (
-            <div key={label}>
+            { value: "100%", label: "PERSONALIZADO" },
+            { value: "3", label: "MODALIDADES" },
+            { value: "AC", label: "RIO BRANCO" },
+          ].map(({ value, label }) => (
+            <div key={label} className="min-w-0">
               <div
                 style={{
                   fontFamily: "'Barlow Condensed', sans-serif",
-                  fontSize: "2.8rem",
+                  fontSize: "clamp(2rem, 5vw, 2.8rem)",
                   fontWeight: 900,
                   color: "#c8ff00",
                   lineHeight: 1,
                 }}
               >
-                <AnimatedNumber target={val} suffix={suffix} />
+                {value}
               </div>
               <div
                 style={{
                   fontFamily: "'Barlow Condensed', sans-serif",
                   fontSize: "0.65rem",
                   fontWeight: 700,
-                  color: "#444",
+                  color: "#555",
                   letterSpacing: "0.15em",
-                  marginTop: "4px",
+                  marginTop: "5px",
                 }}
               >
                 {label}
@@ -488,6 +699,125 @@ function Hero() {
             </div>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
+
+// ─── Para quem é ─────────────────────────────────────────────────────────────
+function PerfilIdeal() {
+  const items = [
+    {
+      num: "01",
+      title: "VOCÊ COMEÇA E PARA",
+      desc: "Tem dificuldade de manter constância e quer transformar treino em rotina.",
+    },
+    {
+      num: "02",
+      title: "TREINA SEM DIREÇÃO",
+      desc: "Faz exercícios, mas não sabe se volume, carga e frequência estão certos para o seu objetivo.",
+    },
+    {
+      num: "03",
+      title: "QUER UM PLANO SEU",
+      desc: "Não quer mais copiar treino pronto e procura uma estratégia adaptada à sua rotina.",
+    },
+    {
+      num: "04",
+      title: "QUER ACOMPANHAMENTO",
+      desc: "Busca alguém para ajustar o processo, cobrar consistência e acompanhar a evolução.",
+    },
+  ];
+
+  return (
+    <section
+      className="py-20 md:py-28 px-6 md:px-16"
+      style={{
+        background: "#0b0b0b",
+        borderTop: "1px solid #111",
+        borderBottom: "1px solid #111",
+      }}
+    >
+      <div className="max-w-7xl mx-auto">
+        <FadeUp>
+          <div className="grid lg:grid-cols-[0.85fr_1.15fr] gap-12 lg:gap-20 items-start">
+            <div>
+              <Label>Para quem é</Label>
+              <h2
+                style={{
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontSize: "clamp(2.8rem, 6vw, 5rem)",
+                  fontWeight: 900,
+                  lineHeight: 0.92,
+                  marginBottom: "22px",
+                }}
+              >
+                TREINO COM
+                <br />
+                <span style={{ color: "#c8ff00" }}>DIREÇÃO.</span>
+              </h2>
+              <p
+                style={{
+                  color: "#555",
+                  fontSize: "0.92rem",
+                  lineHeight: 1.8,
+                  maxWidth: "430px",
+                }}
+              >
+                O objetivo aqui não é só treinar mais. É saber por que você está
+                treinando, o que precisa ajustar e qual é o próximo passo.
+              </p>
+            </div>
+
+            <div
+              className="grid sm:grid-cols-2 gap-px"
+              style={{ background: "#1a1a1a" }}
+            >
+              {items.map((item, index) => (
+                <FadeUp key={item.num} delay={index * 0.06}>
+                  <div
+                    className="h-full"
+                    style={{ background: "#0b0b0b", padding: "28px" }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: "'Barlow Condensed', sans-serif",
+                        color: "#c8ff00",
+                        fontWeight: 900,
+                        fontSize: "0.7rem",
+                        letterSpacing: "0.14em",
+                        marginBottom: "18px",
+                      }}
+                    >
+                      {item.num}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "'Barlow Condensed', sans-serif",
+                        color: "#f5f5f5",
+                        fontWeight: 900,
+                        fontSize: "1.15rem",
+                        letterSpacing: "0.05em",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      {item.title}
+                    </div>
+                    <p
+                      style={{
+                        color: "#555",
+                        fontSize: "0.82rem",
+                        lineHeight: 1.7,
+                      }}
+                    >
+                      {item.desc}
+                    </p>
+                  </div>
+                </FadeUp>
+              ))}
+            </div>
+          </div>
+        </FadeUp>
       </div>
     </section>
   );
@@ -636,6 +966,319 @@ function Sobre() {
   );
 }
 
+// ─── Credibilidade ──────────────────────────────────────────────────────────
+function Credibilidade() {
+  const itens = [
+    {
+      label: "PERSONALIZAÇÃO",
+      value:
+        "Treino estruturado a partir do objetivo, nível e rotina do aluno.",
+    },
+    {
+      label: "ACOMPANHAMENTO",
+      value:
+        "Contato e ajustes ao longo do processo, conforme a modalidade escolhida.",
+    },
+    {
+      label: "FLEXIBILIDADE",
+      value:
+        "Opções online, semipresencial e presencial para diferentes rotinas.",
+    },
+    {
+      label: "ATUAÇÃO",
+      value:
+        "Atendimento presencial em Rio Branco, AC, e acompanhamento online.",
+    },
+  ];
+
+  return (
+    <section
+      className="px-6 md:px-16 pb-24 md:pb-32"
+      style={{ background: "#080808" }}
+    >
+      <div className="max-w-7xl mx-auto">
+        <FadeUp>
+          <div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px"
+            style={{ background: "#1a1a1a", border: "1px solid #1a1a1a" }}
+          >
+            {itens.map((item) => (
+              <div
+                key={item.label}
+                className="min-w-0"
+                style={{ background: "#0b0b0b", padding: "24px" }}
+              >
+                <div
+                  style={{
+                    color: "#c8ff00",
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    fontSize: "0.62rem",
+                    fontWeight: 900,
+                    letterSpacing: "0.14em",
+                    marginBottom: "8px",
+                  }}
+                >
+                  {item.label}
+                </div>
+                <div
+                  style={{
+                    color: "#777",
+                    fontSize: "0.8rem",
+                    lineHeight: 1.65,
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {item.value}
+                </div>
+              </div>
+            ))}
+          </div>
+        </FadeUp>
+      </div>
+    </section>
+  );
+}
+
+// ─── Modalidades ───────────────────────────────────────────────────────────
+type ModalidadeDetalhe = {
+  label: string;
+  title: string;
+  description: string;
+  ideal: string;
+  includes: string[];
+};
+
+const MODALIDADES: Record<Modalidade, ModalidadeDetalhe> = {
+  online: {
+    label: "ONLINE",
+    title: "Treine de onde estiver.",
+    description:
+      "Uma opção para quem precisa de flexibilidade e quer seguir uma estratégia personalizada sem depender de treinos presenciais.",
+    ideal:
+      "Ideal para quem tem autonomia para treinar e quer acompanhamento à distância.",
+    includes: [
+      "Treino personalizado",
+      "Acompanhamento remoto",
+      "Ajustes conforme evolução",
+      "Suporte pelo WhatsApp",
+    ],
+  },
+  semipresencial: {
+    label: "SEMIPRESENCIAL",
+    title: "Autonomia com acompanhamento de perto.",
+    description:
+      "Combina momentos presenciais com treinos planejados para você executar sozinho durante a semana.",
+    ideal:
+      "Ideal para quem quer aprender, corrigir execução e manter autonomia.",
+    includes: [
+      "Treinos presenciais e remotos",
+      "Correção de execução",
+      "Ajustes personalizados",
+      "Acompanhamento contínuo",
+    ],
+  },
+  presencial: {
+    label: "PRESENCIAL",
+    title: "Acompanhamento durante o treino.",
+    description:
+      "Para quem prefere ter o personal por perto durante a sessão, com orientação e correções em tempo real.",
+    ideal:
+      "Ideal para quem valoriza supervisão próxima e orientação durante a execução.",
+    includes: [
+      "Treino acompanhado",
+      "Correção de execução",
+      "Ajustes durante a sessão",
+      "Planejamento individualizado",
+    ],
+  },
+};
+
+function Modalidades() {
+  const [active, setActive] = useState<Modalidade>("presencial");
+  const current = MODALIDADES[active];
+
+  return (
+    <section
+      id="modalidades"
+      className="py-24 md:py-32 px-6 md:px-16"
+      style={{ background: "#080808" }}
+    >
+      <div className="max-w-7xl mx-auto">
+        <FadeUp>
+          <div className="max-w-3xl mb-10">
+            <Label>Como você pode treinar</Label>
+            <h2
+              style={{
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontSize: "clamp(3rem, 7vw, 5.5rem)",
+                fontWeight: 900,
+                lineHeight: 0.92,
+              }}
+            >
+              ESCOLHA A
+              <br />
+              <span style={{ color: "#c8ff00" }}>MODALIDADE.</span>
+            </h2>
+            <p
+              style={{
+                color: "#666",
+                fontSize: "0.92rem",
+                lineHeight: 1.8,
+                marginTop: "18px",
+              }}
+            >
+              Entenda a diferença entre cada formato antes de escolher seu
+              plano. A modalidade selecionada também aparece na mensagem enviada
+              pelo WhatsApp.
+            </p>
+          </div>
+        </FadeUp>
+
+        <div className="grid lg:grid-cols-[0.8fr_1.2fr] gap-5 items-stretch">
+          <div className="grid sm:grid-cols-3 lg:grid-cols-1 gap-2">
+            {(Object.keys(MODALIDADES) as Modalidade[]).map((key) => {
+              const item = MODALIDADES[key];
+              const selected = active === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActive(key)}
+                  className="text-left transition-all duration-200"
+                  aria-pressed={selected}
+                  style={{
+                    background: selected ? "#c8ff00" : "#0f0f0f",
+                    color: selected ? "#080808" : "#f5f5f5",
+                    border: `1px solid ${selected ? "#c8ff00" : "#1c1c1c"}`,
+                    padding: "22px",
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "block",
+                      fontFamily: "'Barlow Condensed', sans-serif",
+                      fontWeight: 900,
+                      fontSize: "1.05rem",
+                      letterSpacing: "0.08em",
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                  <span
+                    className="block mt-2"
+                    style={{
+                      color: selected ? "rgba(8,8,8,0.6)" : "#555",
+                      fontSize: "0.75rem",
+                      lineHeight: 1.55,
+                    }}
+                  >
+                    {item.ideal}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div
+            className="min-w-0"
+            style={{
+              border: "1px solid #1b1b1b",
+              background: "#0f0f0f",
+              padding: "clamp(24px, 5vw, 44px)",
+            }}
+          >
+            <div className="flex flex-wrap items-center gap-2 mb-5">
+              <span
+                style={{
+                  background: "rgba(200,255,0,0.08)",
+                  border: "1px solid rgba(200,255,0,0.2)",
+                  color: "#c8ff00",
+                  padding: "6px 10px",
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontSize: "0.6rem",
+                  fontWeight: 900,
+                  letterSpacing: "0.12em",
+                }}
+              >
+                {current.label}
+              </span>
+            </div>
+            <h3
+              style={{
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontSize: "clamp(2rem, 5vw, 3.5rem)",
+                fontWeight: 900,
+                lineHeight: 0.98,
+                maxWidth: "650px",
+              }}
+            >
+              {current.title}
+            </h3>
+            <p
+              style={{
+                color: "#777",
+                fontSize: "0.9rem",
+                lineHeight: 1.8,
+                maxWidth: "680px",
+                marginTop: "18px",
+              }}
+            >
+              {current.description}
+            </p>
+
+            <div className="grid sm:grid-cols-2 gap-3 mt-8">
+              {current.includes.map((item, index) => (
+                <div key={item} className="flex items-start gap-3 min-w-0">
+                  <span
+                    className="shrink-0 flex items-center justify-center"
+                    style={{
+                      width: "20px",
+                      height: "20px",
+                      borderRadius: "50%",
+                      background: "rgba(200,255,0,0.1)",
+                      color: "#c8ff00",
+                      fontSize: "0.65rem",
+                      fontWeight: 900,
+                    }}
+                  >
+                    {index + 1}
+                  </span>
+                  <span
+                    style={{
+                      color: "#aaa",
+                      fontSize: "0.8rem",
+                      lineHeight: 1.5,
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    {item}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <a
+              href="#planos"
+              className="inline-flex mt-10 items-center gap-3"
+              style={{
+                background: "#c8ff00",
+                color: "#080808",
+                padding: "14px 20px",
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontWeight: 900,
+                fontSize: "0.72rem",
+                letterSpacing: "0.1em",
+              }}
+            >
+              VER PLANOS {current.label} →
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ─── Método ────────────────────────────────────────────────────────────────
 function Metodo() {
   const steps = [
@@ -766,6 +1409,120 @@ function Metodo() {
                     {s.desc}
                   </p>
                 </div>
+              </div>
+            </FadeUp>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─── Como funciona ──────────────────────────────────────────────────────────
+function ComoFunciona() {
+  const passos = [
+    [
+      "01",
+      "CHAME NO WHATSAPP",
+      "Você escolhe um horário para conversar e explica seu objetivo, rotina e momento atual.",
+    ],
+    [
+      "02",
+      "FAÇA A AVALIAÇÃO",
+      "A primeira conversa organiza as informações necessárias para definir o ponto de partida.",
+    ],
+    [
+      "03",
+      "RECEBA SUA ESTRATÉGIA",
+      "O treino é estruturado considerando objetivo, nível e o que precisa caber na sua rotina.",
+    ],
+    [
+      "04",
+      "ACOMPANHE A EVOLUÇÃO",
+      "Os resultados são acompanhados e o plano pode ser ajustado conforme você evolui.",
+    ],
+  ];
+
+  return (
+    <section
+      className="py-24 md:py-32 px-6 md:px-16"
+      style={{ background: "#080808" }}
+    >
+      <div className="max-w-7xl mx-auto">
+        <FadeUp>
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-14">
+            <div>
+              <Label>Sem complicação</Label>
+              <h2
+                style={{
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontSize: "clamp(3rem, 7vw, 5.5rem)",
+                  fontWeight: 900,
+                  lineHeight: 0.92,
+                }}
+              >
+                DO PRIMEIRO
+                <br />
+                <span style={{ color: "#c8ff00" }}>CONTATO</span>
+              </h2>
+            </div>
+            <p
+              style={{
+                color: "#555",
+                fontSize: "0.88rem",
+                maxWidth: "300px",
+                lineHeight: 1.7,
+              }}
+            >
+              Um caminho claro para você saber o que acontece depois de clicar
+              em “quero começar”.
+            </p>
+          </div>
+        </FadeUp>
+
+        <div
+          className="grid md:grid-cols-4 gap-px"
+          style={{ background: "#1a1a1a" }}
+        >
+          {passos.map(([num, title, desc], index) => (
+            <FadeUp key={num} delay={index * 0.08}>
+              <div
+                className="h-full"
+                style={{ background: "#0b0b0b", padding: "30px" }}
+              >
+                <div
+                  style={{
+                    color: "#c8ff00",
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    fontWeight: 900,
+                    fontSize: "0.7rem",
+                    letterSpacing: "0.16em",
+                    marginBottom: "32px",
+                  }}
+                >
+                  {num}
+                </div>
+                <div
+                  style={{
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    color: "#f5f5f5",
+                    fontSize: "1.2rem",
+                    fontWeight: 900,
+                    letterSpacing: "0.05em",
+                    marginBottom: "10px",
+                  }}
+                >
+                  {title}
+                </div>
+                <p
+                  style={{
+                    color: "#555",
+                    fontSize: "0.82rem",
+                    lineHeight: 1.75,
+                  }}
+                >
+                  {desc}
+                </p>
               </div>
             </FadeUp>
           ))}
@@ -921,202 +1678,216 @@ function Treinos() {
   );
 }
 
-// ─── Slider antes/depois (reutilizável) ───────────────────────────────────
-function BeforeAfterSlider({
-  before,
-  after,
-  sliderHeight = 360,
+// ─── Resultados ────────────────────────────────────────────────────────────
+function FeedbackPrint({
+  name,
+  objective,
+  messages,
 }: {
-  before: string;
-  after: string;
-  sliderHeight?: number;
+  name: string;
+  objective: string;
+  messages: { from: "student" | "lucas"; text: string; time: string }[];
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState(48);
-  const dragging = useRef(false);
-
-  const getPos = useCallback((clientX: number) => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return 48;
-    return Math.min(
-      100,
-      Math.max(0, ((clientX - rect.left) / rect.width) * 100),
-    );
-  }, []);
-
-  const onMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (dragging.current) setPos(getPos(e.clientX));
-    },
-    [getPos],
-  );
-  const onTouchMove = useCallback(
-    (e: TouchEvent) => {
-      if (dragging.current) setPos(getPos(e.touches[0].clientX));
-    },
-    [getPos],
-  );
-  const stop = useCallback(() => {
-    dragging.current = false;
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("touchmove", onTouchMove, { passive: true });
-    window.addEventListener("mouseup", stop);
-    window.addEventListener("touchend", stop);
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("touchmove", onTouchMove);
-      window.removeEventListener("mouseup", stop);
-      window.removeEventListener("touchend", stop);
-    };
-  }, [onMouseMove, onTouchMove, stop]);
-
   return (
-    <div
-      ref={containerRef}
-      className="relative overflow-hidden select-none"
-      style={{
-        height: `${sliderHeight}px`,
-        cursor: "ew-resize",
-        background: "#111",
-      }}
-      onMouseDown={() => {
-        dragging.current = true;
-      }}
-      onTouchStart={() => {
-        dragging.current = true;
-      }}
+    <article
+      className="overflow-hidden h-full"
+      style={{ border: "1px solid #1b1b1b", background: "#101010" }}
     >
-      <img
-        src={after}
-        alt="depois"
-        className="absolute inset-0 w-full h-full object-cover"
-        style={{ filter: "brightness(0.88)" }}
-      />
       <div
-        className="absolute inset-0 overflow-hidden"
-        style={{ width: `${pos}%` }}
+        className="flex items-center justify-between gap-4 px-5 py-4"
+        style={{ borderBottom: "1px solid #1b1b1b", background: "#0d0d0d" }}
       >
-        <img
-          src={before}
-          alt="antes"
-          className="absolute inset-0 h-full object-cover"
-          style={{
-            width: containerRef.current?.offsetWidth ?? "100%",
-            filter: "brightness(0.7) saturate(0.25)",
-          }}
-        />
-      </div>
-      <div
-        className="absolute top-0 bottom-0 w-px pointer-events-none"
-        style={{
-          left: `${pos}%`,
-          background: "#c8ff00",
-          boxShadow: "0 0 12px rgba(200,255,0,0.55)",
-        }}
-      >
-        <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex items-center justify-center"
-          style={{
-            width: "36px",
-            height: "36px",
-            background: "#c8ff00",
-            borderRadius: "50%",
-            boxShadow: "0 0 18px rgba(200,255,0,0.5)",
-          }}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path
-              d="M4.5 8h7M2 5.5l-2 2.5 2 2.5M14 5.5l2 2.5-2 2.5"
-              stroke="#080808"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="shrink-0 flex items-center justify-center rounded-full"
+            style={{
+              width: "38px",
+              height: "38px",
+              background: "#c8ff00",
+              color: "#080808",
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontWeight: 900,
+            }}
+          >
+            {name.charAt(0)}
+          </div>
+          <div className="min-w-0">
+            <div
+              className="truncate"
+              style={{
+                color: "#f5f5f5",
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontWeight: 900,
+                fontSize: "0.95rem",
+                letterSpacing: "0.04em",
+              }}
+            >
+              {name}
+            </div>
+            <div
+              style={{
+                color: "#555",
+                fontSize: "0.65rem",
+                marginTop: "2px",
+              }}
+            >
+              {objective} · acompanhamento
+            </div>
+          </div>
         </div>
-      </div>
-      <div
-        className="absolute top-3 left-3 pointer-events-none"
-        style={{ opacity: pos > 10 ? 1 : 0, transition: "opacity 0.2s" }}
-      >
         <span
+          className="shrink-0"
           style={{
-            background: "rgba(0,0,0,0.75)",
-            color: "#666",
-            fontFamily: "'Barlow Condensed', sans-serif",
-            fontSize: "0.6rem",
-            fontWeight: 700,
-            letterSpacing: "0.14em",
-            padding: "3px 9px",
-          }}
-        >
-          ANTES
-        </span>
-      </div>
-      <div
-        className="absolute top-3 right-3 pointer-events-none"
-        style={{ opacity: pos < 90 ? 1 : 0, transition: "opacity 0.2s" }}
-      >
-        <span
-          style={{
-            background: "rgba(200,255,0,0.14)",
             color: "#c8ff00",
             fontFamily: "'Barlow Condensed', sans-serif",
-            fontSize: "0.6rem",
-            fontWeight: 700,
-            letterSpacing: "0.14em",
-            padding: "3px 9px",
-            border: "1px solid rgba(200,255,0,0.22)",
+            fontSize: "0.55rem",
+            fontWeight: 900,
+            letterSpacing: "0.12em",
           }}
         >
-          DEPOIS
+          MOCKUP
         </span>
       </div>
-    </div>
+
+      <div
+        className="p-5 flex flex-col gap-3 min-h-72.5"
+        style={{
+          background:
+            "radial-gradient(circle at 80% 10%, rgba(200,255,0,0.06), transparent 28%), #121212",
+        }}
+      >
+        {messages.map((message, index) => {
+          const isStudent = message.from === "student";
+          return (
+            <div
+              key={`${message.time}-${index}`}
+              className={`flex ${isStudent ? "justify-start" : "justify-end"}`}
+            >
+              <div
+                className="max-w-[88%] rounded-2xl px-3.5 py-2.5"
+                style={{
+                  background: isStudent ? "#1d1d1d" : "#c8ff00",
+                  color: isStudent ? "#e7e7e7" : "#080808",
+                  borderBottomLeftRadius: isStudent ? "4px" : "16px",
+                  borderBottomRightRadius: isStudent ? "16px" : "4px",
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: "0.78rem",
+                    lineHeight: 1.55,
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {message.text}
+                </p>
+                <div
+                  className="text-right mt-1"
+                  style={{
+                    fontSize: "0.52rem",
+                    color: isStudent ? "#666" : "rgba(8,8,8,0.55)",
+                  }}
+                >
+                  {message.time}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </article>
   );
 }
 
-// ─── Resultados + Transformações unificados ────────────────────────────────
 function Resultados() {
+  const destaque = {
+    nome: "Rafael M.",
+    objetivo: "HIPERTROFIA",
+    periodo: "6 MESES",
+    before: IMG.before1,
+    after: IMG.after1,
+  };
+
   const casos = [
     {
-      nome: "Rafael M.",
-      idade: "28 anos",
-      objetivo: "HIPERTROFIA",
-      periodo: "6 MESES",
-      kg: "+8kg",
-      label: "MASSA GANHA",
-      depoimento:
-        "Nunca tinha evoluído tanto em tão pouco tempo. O Lucas ajusta o treino toda semana de acordo com a minha resposta. Não é só mandar planilha e sumir — ele acompanha de verdade.",
-      before: IMG.before1,
-      after: IMG.after1,
-    },
-    {
       nome: "Juliana S.",
-      idade: "31 anos",
       objetivo: "EMAGRECIMENTO",
-      periodo: "4 MESES",
-      kg: "12kg",
-      label: "GORDURA PERDIDA",
-      depoimento:
-        "Perdi 12kg e mantive toda a massa muscular. O protocolo dele é completamente diferente do que eu tinha tentado antes. Finalmente entendi que treino inteligente é diferente de treino pesado.",
+      periodo: "8 MESES",
       before: IMG.before2,
       after: IMG.after2,
     },
     {
       nome: "Bruno K.",
-      idade: "25 anos",
       objetivo: "PERFORMANCE",
-      periodo: "3 MESES",
-      kg: "+23%",
-      label: "RENDIMENTO",
-      depoimento:
-        "Sou atleta amador e o protocolo foi montado especificamente para a minha modalidade. Meu desempenho melhorou de um jeito que não esperava tão rápido. Recomendo sem hesitar.",
+      periodo: "6 MESES",
       before: IMG.before3,
       after: IMG.after3,
+    },
+  ];
+
+  const feedbacks = [
+    {
+      name: "Rafael M.",
+      objective: "HIPERTROFIA",
+      messages: [
+        {
+          from: "student" as const,
+          text: "Lucas, consegui aumentar a carga hoje. Nem eu esperava.",
+          time: "08:41",
+        },
+        {
+          from: "lucas" as const,
+          text: "Boa! É exatamente esse tipo de evolução que a gente busca. Vamos manter e ajustar o próximo treino.",
+          time: "08:43",
+        },
+        {
+          from: "student" as const,
+          text: "Agora tô começando a gostar de treinar de verdade kkkkk",
+          time: "08:44",
+        },
+      ],
+    },
+    {
+      name: "Juliana S.",
+      objective: "EMAGRECIMENTO",
+      messages: [
+        {
+          from: "student" as const,
+          text: "Consegui cumprir todos os treinos da semana.",
+          time: "19:12",
+        },
+        {
+          from: "lucas" as const,
+          text: "Boa! Consistência primeiro. Vou acompanhar como seu corpo respondeu e ajustar o que for necessário.",
+          time: "19:15",
+        },
+        {
+          from: "student" as const,
+          text: "Tá ficando muito mais fácil manter a rotina.",
+          time: "19:17",
+        },
+      ],
+    },
+    {
+      name: "Bruno K.",
+      objective: "PERFORMANCE",
+      messages: [
+        {
+          from: "student" as const,
+          text: "Meu desempenho no treino de hoje foi muito melhor.",
+          time: "07:28",
+        },
+        {
+          from: "lucas" as const,
+          text: "Excelente. Anotei sua resposta. Vamos usar isso para organizar a próxima progressão.",
+          time: "07:31",
+        },
+        {
+          from: "student" as const,
+          text: "É muito melhor quando o treino acompanha o que eu consigo fazer.",
+          time: "07:32",
+        },
+      ],
     },
   ];
 
@@ -1128,212 +1899,342 @@ function Resultados() {
     >
       <div className="max-w-7xl mx-auto">
         <FadeUp>
-          <Label>Resultados reais</Label>
-          <h2
-            style={{
-              fontFamily: "'Barlow Condensed', sans-serif",
-              fontSize: "clamp(3rem, 7vw, 5.5rem)",
-              fontWeight: 900,
-              lineHeight: 0.92,
-              marginBottom: "64px",
-            }}
-          >
-            QUEM
-            <br />
-            <span style={{ color: "#c8ff00" }}>EVOLUIU</span>
-          </h2>
-        </FadeUp>
-
-        {/* Métricas */}
-        <FadeUp delay={0.08}>
-          <div
-            className="grid grid-cols-2 md:grid-cols-4 gap-px mb-20"
-            style={{ background: "#1a1a1a" }}
-          >
-            {[
-              { val: 200, suffix: "kg+", label: "KG PERDIDOS" },
-              { val: 85, suffix: "%", label: "TAXA DE ADESÃO" },
-              { val: 30, suffix: "%+", label: "PERFORMANCE" },
-              { val: 97, suffix: "%", label: "SATISFAÇÃO" },
-            ].map(({ val, suffix, label }) => (
-              <div
-                key={label}
-                className="flex flex-col items-center justify-center py-9 px-4"
-                style={{ background: "#0b0b0b" }}
-              >
-                <div
-                  style={{
-                    fontFamily: "'Barlow Condensed', sans-serif",
-                    fontSize: "3rem",
-                    fontWeight: 900,
-                    color: "#c8ff00",
-                    lineHeight: 1,
-                    marginBottom: "6px",
-                  }}
-                >
-                  <AnimatedNumber target={val} suffix={suffix} />
-                </div>
-                <div
-                  style={{
-                    fontFamily: "'Barlow Condensed', sans-serif",
-                    fontSize: "0.6rem",
-                    fontWeight: 700,
-                    color: "#444",
-                    letterSpacing: "0.14em",
-                    textAlign: "center",
-                  }}
-                >
-                  {label}
-                </div>
-              </div>
-            ))}
+          <div className="max-w-3xl mb-14">
+            <Label>Resultados e acompanhamento</Label>
+            <h2
+              style={{
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontSize: "clamp(3rem, 8vw, 6.5rem)",
+                fontWeight: 900,
+                lineHeight: 0.9,
+              }}
+            >
+              RESULTADO
+              <br />
+              <span style={{ color: "#c8ff00" }}>É PROCESSO.</span>
+            </h2>
+            <p
+              style={{
+                color: "#666",
+                fontSize: "0.95rem",
+                lineHeight: 1.8,
+                maxWidth: "620px",
+                marginTop: "22px",
+              }}
+            >
+              O objetivo desta seção é mostrar a jornada completa: ponto de
+              partida, evolução e acompanhamento. As imagens e conversas abaixo
+              são layouts demonstrativos e devem ser substituídos por materiais
+              reais e autorizados antes da publicação.
+            </p>
           </div>
         </FadeUp>
 
-        {/* Cards unificados: depoimento + antes/depois */}
-        <div className="grid md:grid-cols-3 gap-6">
-          {casos.map((c, i) => (
-            <FadeUp key={c.nome} delay={i * 0.1}>
-              <div
-                className="flex flex-col overflow-hidden transition-all duration-300"
-                style={{ border: "1px solid #191919", background: "#0f0f0f" }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "#2a2a2a";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "#191919";
-                }}
-              >
-                {/* Cabeçalho do card */}
-                <div style={{ padding: "28px 28px 0" }}>
-                  <div className="flex items-start justify-between mb-5">
-                    <div>
-                      <div
-                        style={{
-                          fontFamily: "'Barlow Condensed', sans-serif",
-                          fontWeight: 900,
-                          fontSize: "1.1rem",
-                          color: "#f5f5f5",
-                          lineHeight: 1.1,
-                        }}
-                      >
-                        {c.nome}
-                      </div>
-                      <div
-                        style={{
-                          fontFamily: "'Barlow Condensed', sans-serif",
-                          fontSize: "0.62rem",
-                          fontWeight: 700,
-                          color: "#444",
-                          letterSpacing: "0.1em",
-                          marginTop: "3px",
-                        }}
-                      >
-                        {c.idade}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div
-                        style={{
-                          fontFamily: "'Barlow Condensed', sans-serif",
-                          fontSize: "2.2rem",
-                          fontWeight: 900,
-                          color: "#c8ff00",
-                          lineHeight: 1,
-                        }}
-                      >
-                        {c.kg}
-                      </div>
-                      <div
-                        style={{
-                          fontFamily: "'Barlow Condensed', sans-serif",
-                          fontSize: "0.58rem",
-                          fontWeight: 700,
-                          color: "#333",
-                          letterSpacing: "0.1em",
-                        }}
-                      >
-                        {c.label}
-                      </div>
-                    </div>
-                  </div>
+        <FadeUp delay={0.08}>
+          <article
+            className="overflow-hidden"
+            style={{ border: "1px solid #1b1b1b", background: "#0f0f0f" }}
+          >
+            <div className="p-6 md:p-8 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+              <div className="min-w-0">
+                <div
+                  style={{
+                    color: "#c8ff00",
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    fontSize: "0.62rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.15em",
+                    marginBottom: "8px",
+                  }}
+                >
+                  CASO EM DESTAQUE · MOCKUP
+                </div>
+                <h3
+                  style={{
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    fontSize: "clamp(1.8rem, 4vw, 2.6rem)",
+                    fontWeight: 900,
+                    lineHeight: 1,
+                  }}
+                >
+                  {destaque.nome}
+                </h3>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span
+                  style={{
+                    color: "#c8ff00",
+                    border: "1px solid rgba(200,255,0,0.2)",
+                    background: "rgba(200,255,0,0.07)",
+                    padding: "6px 10px",
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    fontSize: "0.6rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.12em",
+                  }}
+                >
+                  {destaque.objetivo}
+                </span>
+                <span
+                  style={{
+                    color: "#777",
+                    border: "1px solid #222",
+                    padding: "6px 10px",
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    fontSize: "0.6rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.12em",
+                  }}
+                >
+                  {destaque.periodo}
+                </span>
+              </div>
+            </div>
 
-                  {/* Tag objetivo + período */}
-                  <div className="flex items-center gap-2 mb-5">
-                    <span
-                      style={{
-                        background: "rgba(200,255,0,0.08)",
-                        color: "#c8ff00",
-                        fontFamily: "'Barlow Condensed', sans-serif",
-                        fontSize: "0.6rem",
-                        fontWeight: 700,
-                        letterSpacing: "0.14em",
-                        padding: "4px 10px",
-                        border: "1px solid rgba(200,255,0,0.18)",
-                      }}
-                    >
-                      {c.objetivo}
-                    </span>
-                    <span
-                      style={{
-                        background: "transparent",
-                        color: "#333",
-                        fontFamily: "'Barlow Condensed', sans-serif",
-                        fontSize: "0.6rem",
-                        fontWeight: 700,
-                        letterSpacing: "0.14em",
-                        padding: "4px 10px",
-                        border: "1px solid #222",
-                      }}
-                    >
-                      {c.periodo}
-                    </span>
-                  </div>
+            <BeforeAfterSlider
+              before={destaque.before}
+              after={destaque.after}
+              height={520}
+            />
 
-                  {/* Depoimento */}
+            <div
+              className="grid md:grid-cols-3 gap-px"
+              style={{ background: "#1b1b1b" }}
+            >
+              {[
+                [
+                  "01",
+                  "PONTO DE PARTIDA",
+                  "Entender o objetivo, rotina e contexto do aluno.",
+                ],
+                [
+                  "02",
+                  "ESTRATÉGIA",
+                  "Treino estruturado para o momento e a capacidade atual.",
+                ],
+                [
+                  "03",
+                  "ACOMPANHAMENTO",
+                  "Ajustar o caminho conforme a resposta e a evolução.",
+                ],
+              ].map(([num, title, text]) => (
+                <div
+                  key={num}
+                  style={{ background: "#0b0b0b", padding: "22px" }}
+                >
+                  <div
+                    style={{
+                      color: "#c8ff00",
+                      fontFamily: "'Barlow Condensed', sans-serif",
+                      fontWeight: 900,
+                      fontSize: "0.65rem",
+                      letterSpacing: "0.14em",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    {num}
+                  </div>
+                  <div
+                    style={{
+                      color: "#f5f5f5",
+                      fontFamily: "'Barlow Condensed', sans-serif",
+                      fontWeight: 900,
+                      fontSize: "0.9rem",
+                      marginBottom: "6px",
+                    }}
+                  >
+                    {title}
+                  </div>
                   <p
                     style={{
                       color: "#555",
-                      fontSize: "0.85rem",
-                      lineHeight: 1.8,
-                      marginBottom: "24px",
+                      fontSize: "0.78rem",
+                      lineHeight: 1.7,
                     }}
                   >
-                    "{c.depoimento}"
+                    {text}
                   </p>
+                </div>
+              ))}
+            </div>
+          </article>
+        </FadeUp>
 
-                  {/* Divider com instrução */}
-                  <div className="flex items-center gap-3 mb-4">
+        <FadeUp delay={0.12}>
+          <div className="mt-20 mb-8 flex flex-col md:flex-row md:items-end md:justify-between gap-5">
+            <div>
+              <Label>Outros casos</Label>
+              <h3
+                style={{
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontSize: "clamp(2.4rem, 5vw, 4rem)",
+                  fontWeight: 900,
+                  lineHeight: 0.95,
+                }}
+              >
+                CADA ALUNO,
+                <br />
+                <span style={{ color: "#c8ff00" }}>UM CONTEXTO.</span>
+              </h3>
+            </div>
+            <p
+              style={{
+                color: "#555",
+                fontSize: "0.82rem",
+                lineHeight: 1.7,
+                maxWidth: "360px",
+              }}
+            >
+              Mostre objetivos diferentes sem transformar a seção em uma galeria
+              repetitiva de cards.
+            </p>
+          </div>
+        </FadeUp>
+
+        <div className="grid md:grid-cols-2 gap-5">
+          {casos.map((caso, index) => (
+            <FadeUp key={caso.nome} delay={index * 0.08}>
+              <article
+                className="overflow-hidden h-full"
+                style={{ border: "1px solid #191919", background: "#0f0f0f" }}
+              >
+                <div
+                  className="grid grid-cols-2 gap-px"
+                  style={{ background: "#222" }}
+                >
+                  {[
+                    { label: "ANTES", src: caso.before },
+                    { label: "DEPOIS", src: caso.after },
+                  ].map((photo) => (
                     <div
-                      style={{ flex: 1, height: "1px", background: "#181818" }}
-                    />
-                    <span
+                      key={photo.label}
+                      className="relative aspect-4/5 overflow-hidden"
+                      style={{ background: "#111" }}
+                    >
+                      <img
+                        src={photo.src}
+                        alt={`${photo.label} — ${caso.nome}`}
+                        className="w-full h-full object-cover"
+                        style={{
+                          filter:
+                            photo.label === "ANTES"
+                              ? "brightness(0.68) saturate(0.35)"
+                              : "brightness(0.9)",
+                        }}
+                      />
+                      <span
+                        className="absolute top-3 left-3"
+                        style={{
+                          background:
+                            photo.label === "DEPOIS"
+                              ? "rgba(200,255,0,0.14)"
+                              : "rgba(0,0,0,0.78)",
+                          color: photo.label === "DEPOIS" ? "#c8ff00" : "#fff",
+                          border:
+                            photo.label === "DEPOIS"
+                              ? "1px solid rgba(200,255,0,0.22)"
+                              : "none",
+                          padding: "4px 8px",
+                          fontFamily: "'Barlow Condensed', sans-serif",
+                          fontSize: "0.55rem",
+                          fontWeight: 700,
+                          letterSpacing: "0.12em",
+                        }}
+                      >
+                        {photo.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="p-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+                  <div>
+                    <h4
                       style={{
                         fontFamily: "'Barlow Condensed', sans-serif",
-                        fontSize: "0.58rem",
-                        fontWeight: 700,
-                        color: "#2a2a2a",
-                        letterSpacing: "0.14em",
-                        whiteSpace: "nowrap",
+                        fontSize: "1.25rem",
+                        fontWeight: 900,
                       }}
                     >
-                      ARRASTE PARA VER A TRANSFORMAÇÃO
-                    </span>
-                    <div
-                      style={{ flex: 1, height: "1px", background: "#181818" }}
-                    />
+                      {caso.nome}
+                    </h4>
+                    <p
+                      style={{
+                        color: "#555",
+                        fontSize: "0.75rem",
+                        marginTop: "4px",
+                      }}
+                    >
+                      {caso.objetivo} · {caso.periodo}
+                    </p>
                   </div>
+                  <span
+                    style={{
+                      color: "#444",
+                      fontSize: "0.65rem",
+                      lineHeight: 1.5,
+                      maxWidth: "220px",
+                    }}
+                  >
+                    MOCKUP — substituir por fotos do mesmo aluno, com
+                    enquadramento consistente.
+                  </span>
                 </div>
-
-                {/* Slider antes/depois */}
-                <BeforeAfterSlider
-                  before={c.before}
-                  after={c.after}
-                  sliderHeight={300}
-                />
-              </div>
+              </article>
             </FadeUp>
           ))}
+        </div>
+
+        <FadeUp delay={0.15}>
+          <div className="mt-24 mb-8">
+            <Label>Feedbacks do acompanhamento</Label>
+            <h3
+              style={{
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontSize: "clamp(2.5rem, 6vw, 4.5rem)",
+                fontWeight: 900,
+                lineHeight: 0.92,
+              }}
+            >
+              NÃO É SÓ O
+              <br />
+              <span style={{ color: "#c8ff00" }}>RESULTADO FINAL.</span>
+            </h3>
+            <p
+              style={{
+                color: "#666",
+                fontSize: "0.9rem",
+                lineHeight: 1.8,
+                maxWidth: "600px",
+                marginTop: "18px",
+              }}
+            >
+              O diferencial aparece também no caminho: dúvidas, pequenas
+              vitórias, ajustes e retorno do aluno durante o acompanhamento.
+            </p>
+          </div>
+        </FadeUp>
+
+        <div className="grid lg:grid-cols-3 gap-5">
+          {feedbacks.map((feedback, index) => (
+            <FadeUp key={feedback.name} delay={index * 0.08}>
+              <FeedbackPrint {...feedback} />
+            </FadeUp>
+          ))}
+        </div>
+
+        <div
+          className="mt-6 px-5 py-4"
+          style={{
+            border: "1px dashed #242424",
+            background: "#0d0d0d",
+            color: "#444",
+            fontSize: "0.72rem",
+            lineHeight: 1.7,
+          }}
+        >
+          <strong style={{ color: "#666" }}>Importante:</strong> os prints desta
+          versão são mockups de interface. Na versão comercial, substitua-os por
+          feedbacks verdadeiros e autorizados pelos alunos.
         </div>
       </div>
     </section>
@@ -1341,6 +2242,14 @@ function Resultados() {
 }
 
 // ─── Planos ────────────────────────────────────────────────────────────────
+type Modalidade = "online" | "semipresencial" | "presencial";
+
+const MODALIDADE_LABEL: Record<Modalidade, string> = {
+  online: "ONLINE",
+  semipresencial: "SEMIPRESENCIAL",
+  presencial: "PRESENCIAL",
+};
+
 function Planos() {
   const [billing, setBilling] = useState<"mensal" | "trimestral">("mensal");
 
@@ -1348,57 +2257,69 @@ function Planos() {
     {
       name: "STARTER",
       tag: "Para quem está começando",
-      priceM: 290,
-      priceT: 249,
-      color: "#1a1a1a",
-      accent: "#444",
+      prices: {
+        online: { mensal: 169, trimestral: 149 },
+        semipresencial: { mensal: 219, trimestral: 199 },
+        presencial: { mensal: 290, trimestral: 249 },
+      },
       highlight: false,
       features: [
         "2 treinos por semana",
-        "Planilha de treino",
+        "Planilha de treino personalizada",
         "Acompanhamento mensal",
         "Suporte via WhatsApp",
-        "Avaliação física inicial",
+        "Avaliação inicial",
       ],
     },
     {
       name: "PRO",
       tag: "O mais escolhido",
-      priceM: 490,
-      priceT: 420,
-      color: "#c8ff00",
-      accent: "#080808",
+      prices: {
+        online: { mensal: 299, trimestral: 269 },
+        semipresencial: { mensal: 369, trimestral: 329 },
+        presencial: { mensal: 490, trimestral: 420 },
+      },
       highlight: true,
       features: [
         "4 treinos por semana",
-        "Planilha de treino personalizada",
+        "Planilha 100% personalizada",
         "Acompanhamento semanal",
-        "Suporte ilimitado via WhatsApp",
-        "Avaliação física quinzenal",
-        "Plano alimentar básico",
-        "Acesso à comunidade exclusiva",
+        "Suporte via WhatsApp",
+        "Avaliação quinzenal",
+        "Ajustes de protocolo",
+        "Comunidade exclusiva",
       ],
     },
     {
       name: "ELITE",
       tag: "Máxima performance",
-      priceM: 790,
-      priceT: 680,
-      color: "#1a1a1a",
-      accent: "#f5f5f5",
+      prices: {
+        online: { mensal: 449, trimestral: 399 },
+        semipresencial: { mensal: 549, trimestral: 489 },
+        presencial: { mensal: 790, trimestral: 680 },
+      },
       highlight: false,
       features: [
-        "Treinos todos os dias",
-        "Protocolos 100% exclusivos",
-        "Acompanhamento diário",
-        "Suporte prioritário 24h",
-        "Avaliação física semanal",
-        "Plano alimentar completo",
-        "Consultoria de suplementação",
-        "Relatório mensal de evolução",
+        "Treino altamente personalizado",
+        "Acompanhamento próximo",
+        "Suporte prioritário",
+        "Avaliação semanal",
+        "Ajustes contínuos",
+        "Relatório de evolução",
+        "Estratégia para performance",
       ],
     },
   ];
+
+  const [modalidades, setModalidades] = useState<Record<string, Modalidade>>(
+    Object.fromEntries(
+      plans.map((plan) => [plan.name, "presencial"]),
+    ) as Record<string, Modalidade>,
+  );
+
+  const selecionarModalidade = (plano: string, modalidade: Modalidade) => {
+    setModalidades((current) => ({ ...current, [plano]: modalidade }));
+  };
 
   return (
     <section
@@ -1409,21 +2330,36 @@ function Planos() {
       <div className="max-w-7xl mx-auto">
         <FadeUp>
           <Label>Investimento</Label>
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-8 mb-16">
-            <h2
-              style={{
-                fontFamily: "'Barlow Condensed', sans-serif",
-                fontSize: "clamp(3rem, 7vw, 5.5rem)",
-                fontWeight: 900,
-                lineHeight: 0.92,
-              }}
-            >
-              ESCOLHA
-              <br />
-              <span style={{ color: "#c8ff00" }}>SEU PLANO</span>
-            </h2>
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-8 mb-10">
+            <div>
+              <h2
+                style={{
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontSize: "clamp(3rem, 7vw, 5.5rem)",
+                  fontWeight: 900,
+                  lineHeight: 0.92,
+                }}
+              >
+                ESCOLHA
+                <br />
+                <span style={{ color: "#c8ff00" }}>SEU PLANO</span>
+              </h2>
+              <p
+                style={{
+                  color: "#555",
+                  fontSize: "0.88rem",
+                  lineHeight: 1.7,
+                  maxWidth: "500px",
+                  marginTop: "18px",
+                }}
+              >
+                O mesmo plano pode funcionar em três formatos: online,
+                semipresencial ou presencial. Escolha a modalidade e veja o
+                valor correspondente antes de chamar no WhatsApp.
+              </p>
+            </div>
 
-            {/* Toggle */}
+            {/* Toggle de pagamento */}
             <div className="flex items-center gap-4 self-start md:self-end">
               <span
                 style={{
@@ -1437,6 +2373,8 @@ function Planos() {
                 MENSAL
               </span>
               <button
+                type="button"
+                aria-label="Alternar entre cobrança mensal e trimestral"
                 onClick={() =>
                   setBilling((b) => (b === "mensal" ? "trimestral" : "mensal"))
                 }
@@ -1483,7 +2421,7 @@ function Planos() {
                     border: "1px solid rgba(200,255,0,0.2)",
                   }}
                 >
-                  ECONOMIZE 15%
+                  ECONOMIZE
                 </span>
               </div>
             </div>
@@ -1491,327 +2429,403 @@ function Planos() {
         </FadeUp>
 
         <div className="grid md:grid-cols-3 gap-5 items-stretch">
-          {plans.map((p, i) => (
-            <FadeUp key={p.name} delay={i * 0.1}>
-              <div
-                className="relative flex flex-col h-full transition-all duration-300"
-                style={{
-                  background: p.highlight ? "#c8ff00" : "#0f0f0f",
-                  border: p.highlight ? "none" : "1px solid #1a1a1a",
-                  padding: "40px 32px",
-                  transform: p.highlight ? "scale(1.03)" : "scale(1)",
-                }}
-              >
-                {p.highlight && (
-                  <div
-                    className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-5 py-1.5"
-                    style={{
-                      background: "#080808",
-                      color: "#c8ff00",
-                      fontFamily: "'Barlow Condensed', sans-serif",
-                      fontSize: "0.62rem",
-                      fontWeight: 900,
-                      letterSpacing: "0.15em",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    MAIS POPULAR
-                  </div>
-                )}
+          {plans.map((p, i) => {
+            const modalidade = modalidades[p.name];
+            const preco = p.prices[modalidade][billing];
 
-                <div style={{ marginBottom: "8px" }}>
-                  <div
-                    style={{
-                      fontFamily: "'Barlow Condensed', sans-serif",
-                      fontWeight: 900,
-                      fontSize: "2rem",
-                      color: p.highlight ? "#080808" : "#f5f5f5",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    {p.name}
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: "'Barlow Condensed', sans-serif",
-                      fontSize: "0.7rem",
-                      fontWeight: 600,
-                      color: p.highlight ? "rgba(8,8,8,0.55)" : "#444",
-                      letterSpacing: "0.1em",
-                      marginTop: "4px",
-                    }}
-                  >
-                    {p.tag.toUpperCase()}
-                  </div>
-                </div>
-
+            return (
+              <FadeUp key={p.name} delay={i * 0.1}>
                 <div
-                  className="flex items-end gap-1 my-8"
+                  className="relative flex flex-col h-full transition-all duration-300"
                   style={{
-                    borderTop: `1px solid ${p.highlight ? "rgba(8,8,8,0.15)" : "#1a1a1a"}`,
-                    paddingTop: "28px",
+                    background: p.highlight ? "#c8ff00" : "#0f0f0f",
+                    border: p.highlight ? "none" : "1px solid #1a1a1a",
+                    padding: "40px 32px",
+                    transform: p.highlight ? "scale(1.02)" : "scale(1)",
+                    zIndex: p.highlight ? 2 : 1,
+                    overflow: "hidden",
                   }}
                 >
-                  <div
-                    style={{
-                      fontFamily: "'Barlow Condensed', sans-serif",
-                      fontWeight: 900,
-                      fontSize: "0.9rem",
-                      color: p.highlight ? "rgba(8,8,8,0.7)" : "#555",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    R$
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: "'Barlow Condensed', sans-serif",
-                      fontWeight: 900,
-                      fontSize: "4.5rem",
-                      lineHeight: 1,
-                      color: p.highlight ? "#080808" : "#f5f5f5",
-                    }}
-                  >
-                    {billing === "mensal" ? p.priceM : p.priceT}
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: "'Barlow Condensed', sans-serif",
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      color: p.highlight ? "rgba(8,8,8,0.55)" : "#444",
-                      marginBottom: "6px",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    /mês
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3 flex-1 mb-10">
-                  {p.features.map((f) => (
-                    <div key={f} className="flex items-center gap-3">
-                      <div
-                        className="flex-shrink-0 flex items-center justify-center"
-                        style={{
-                          width: "18px",
-                          height: "18px",
-                          background: p.highlight
-                            ? "rgba(8,8,8,0.12)"
-                            : "rgba(200,255,0,0.1)",
-                          borderRadius: "50%",
-                        }}
-                      >
-                        <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
-                          <path
-                            d="M1.5 4.5l2 2 4-4"
-                            stroke={p.highlight ? "#080808" : "#c8ff00"}
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </div>
-                      <span
-                        style={{
-                          fontFamily: "'Barlow', sans-serif",
-                          fontSize: "0.85rem",
-                          color: p.highlight ? "#080808" : "#666",
-                        }}
-                      >
-                        {f}
-                      </span>
+                  {p.highlight && (
+                    <div
+                      className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-5 py-1.5"
+                      style={{
+                        background: "#080808",
+                        color: "#c8ff00",
+                        fontFamily: "'Barlow Condensed', sans-serif",
+                        fontSize: "0.62rem",
+                        fontWeight: 900,
+                        letterSpacing: "0.15em",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      MAIS POPULAR
                     </div>
-                  ))}
-                </div>
+                  )}
 
-                <a
-                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
-                    `Olá, Lucas! Tenho interesse no plano ${p.name}. Gostaria de saber mais detalhes.`,
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block text-center transition-all duration-250"
-                  style={{
-                    background: p.highlight ? "#080808" : "#c8ff00",
-                    color: p.highlight ? "#c8ff00" : "#080808",
-                    fontFamily: "'Barlow Condensed', sans-serif",
-                    fontWeight: 900,
-                    fontSize: "0.8rem",
-                    letterSpacing: "0.1em",
-                    padding: "15px",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.opacity = "0.88";
-                    e.currentTarget.style.transform = "translateY(-1px)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.opacity = "1";
-                    e.currentTarget.style.transform = "";
-                  }}
-                >
-                  QUERO ESTE PLANO
-                </a>
-              </div>
-            </FadeUp>
-          ))}
+                  <div style={{ marginBottom: "8px" }}>
+                    <div
+                      style={{
+                        fontFamily: "'Barlow Condensed', sans-serif",
+                        fontWeight: 900,
+                        fontSize: "2rem",
+                        color: p.highlight ? "#080808" : "#f5f5f5",
+                        letterSpacing: "0.06em",
+                      }}
+                    >
+                      {p.name}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "'Barlow Condensed', sans-serif",
+                        fontSize: "0.7rem",
+                        fontWeight: 600,
+                        color: p.highlight ? "rgba(8,8,8,0.55)" : "#444",
+                        letterSpacing: "0.1em",
+                        marginTop: "4px",
+                      }}
+                    >
+                      {p.tag.toUpperCase()}
+                    </div>
+                  </div>
+
+                  {/* Modalidade do plano */}
+                  <div
+                    style={{
+                      borderTop: `1px solid ${p.highlight ? "rgba(8,8,8,0.15)" : "#1a1a1a"}`,
+                      paddingTop: "22px",
+                      marginTop: "16px",
+                    }}
+                  >
+                    <label
+                      htmlFor={`modalidade-${p.name}`}
+                      style={{
+                        display: "block",
+                        fontFamily: "'Barlow Condensed', sans-serif",
+                        fontSize: "0.62rem",
+                        fontWeight: 900,
+                        color: p.highlight ? "rgba(8,8,8,0.55)" : "#444",
+                        letterSpacing: "0.14em",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      MODALIDADE
+                    </label>
+                    <select
+                      id={`modalidade-${p.name}`}
+                      value={modalidade}
+                      onChange={(e) =>
+                        selecionarModalidade(
+                          p.name,
+                          e.target.value as Modalidade,
+                        )
+                      }
+                      style={{
+                        width: "100%",
+                        background: p.highlight
+                          ? "rgba(8,8,8,0.08)"
+                          : "#080808",
+                        border: `1px solid ${p.highlight ? "rgba(8,8,8,0.18)" : "#202020"}`,
+                        color: p.highlight ? "#080808" : "#f5f5f5",
+                        fontFamily: "'Barlow Condensed', sans-serif",
+                        fontSize: "0.78rem",
+                        fontWeight: 700,
+                        letterSpacing: "0.08em",
+                        padding: "13px 14px",
+                        outline: "none",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {Object.entries(MODALIDADE_LABEL).map(
+                        ([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </div>
+
+                  <div className="flex items-end gap-1 my-7">
+                    <div
+                      style={{
+                        fontFamily: "'Barlow Condensed', sans-serif",
+                        fontWeight: 900,
+                        fontSize: "0.9rem",
+                        color: p.highlight ? "rgba(8,8,8,0.7)" : "#555",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      R$
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "'Barlow Condensed', sans-serif",
+                        fontWeight: 900,
+                        fontSize: "clamp(3.2rem, 9vw, 4.5rem)",
+                        lineHeight: 0.95,
+                        color: p.highlight ? "#080808" : "#f5f5f5",
+                      }}
+                    >
+                      {preco}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "'Barlow Condensed', sans-serif",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        color: p.highlight ? "rgba(8,8,8,0.55)" : "#444",
+                        marginBottom: "6px",
+                        letterSpacing: "0.06em",
+                      }}
+                    >
+                      {billing === "mensal" ? "/mês" : "/mês no trimestral"}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignSelf: "flex-start",
+                      background: p.highlight
+                        ? "rgba(8,8,8,0.1)"
+                        : "rgba(200,255,0,0.08)",
+                      color: p.highlight ? "#080808" : "#c8ff00",
+                      fontFamily: "'Barlow Condensed', sans-serif",
+                      fontSize: "0.6rem",
+                      fontWeight: 900,
+                      letterSpacing: "0.12em",
+                      padding: "6px 9px",
+                      marginBottom: "22px",
+                    }}
+                  >
+                    {MODALIDADE_LABEL[modalidade]}
+                  </div>
+
+                  <div className="flex flex-col gap-3 flex-1 mb-10">
+                    {p.features.map((f) => (
+                      <div key={f} className="flex items-center gap-3">
+                        <div
+                          className="shrink-0 flex items-center justify-center"
+                          style={{
+                            width: "18px",
+                            height: "18px",
+                            background: p.highlight
+                              ? "rgba(8,8,8,0.12)"
+                              : "rgba(200,255,0,0.1)",
+                            borderRadius: "50%",
+                          }}
+                        >
+                          <svg
+                            width="9"
+                            height="9"
+                            viewBox="0 0 9 9"
+                            fill="none"
+                          >
+                            <path
+                              d="M1.5 4.5l2 2 4-4"
+                              stroke={p.highlight ? "#080808" : "#c8ff00"}
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+                        <span
+                          style={{
+                            fontFamily: "'Barlow', sans-serif",
+                            fontSize: "0.85rem",
+                            lineHeight: 1.45,
+                            color: p.highlight ? "#080808" : "#666",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {f}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <a
+                    href={whatsappLink(
+                      `Olá, Lucas! Tenho interesse no plano ${p.name} na modalidade ${MODALIDADE_LABEL[modalidade].toLowerCase()}, ${billing === "mensal" ? "cobrança mensal" : "plano trimestral"}. Gostaria de saber mais detalhes.`,
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-center transition-all duration-250"
+                    style={{
+                      background: p.highlight ? "#080808" : "#c8ff00",
+                      color: p.highlight ? "#c8ff00" : "#080808",
+                      fontFamily: "'Barlow Condensed', sans-serif",
+                      fontWeight: 900,
+                      fontSize: "0.8rem",
+                      letterSpacing: "0.1em",
+                      padding: "15px",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.opacity = "0.88";
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.opacity = "1";
+                      e.currentTarget.style.transform = "";
+                    }}
+                  >
+                    QUERO ESTE PLANO
+                  </a>
+                </div>
+              </FadeUp>
+            );
+          })}
         </div>
 
-        <FadeUp delay={0.3}>
-          <p
-            className="text-center mt-10"
+        <FadeUp delay={0.25}>
+          <div
+            className="mt-10"
             style={{
-              color: "#333",
-              fontSize: "0.8rem",
-              fontFamily: "'Barlow', sans-serif",
+              border: "1px solid #171717",
+              background: "#0f0f0f",
+              padding: "18px 20px",
             }}
           >
-            Todos os planos incluem avaliação física gratuita na primeira
-            semana. Sem fidelidade mínima no plano mensal.
-          </p>
+            <p
+              className="text-center"
+              style={{
+                color: "#444",
+                fontSize: "0.8rem",
+                fontFamily: "'Barlow', sans-serif",
+                lineHeight: 1.7,
+              }}
+            >
+              Valores exibidos como referência. Antes de publicar, confirme os
+              preços reais de cada modalidade, benefícios e condições com o
+              treinador.
+            </p>
+          </div>
         </FadeUp>
       </div>
     </section>
   );
 }
 
-// ─── Galeria ───────────────────────────────────────────────────────────────
-function Galeria() {
+// ─── FAQ ────────────────────────────────────────────────────────────────────
+function FAQ() {
+  const [open, setOpen] = useState<number | null>(null);
+
+  const questions = [
+    {
+      q: "Como funciona a avaliação?",
+      a: "Você entra em contato pelo WhatsApp e conversa sobre objetivo, rotina e momento atual. A partir disso, é definido o próximo passo do atendimento.",
+    },
+    {
+      q: "Quais modalidades estão disponíveis?",
+      a: "Você pode escolher entre atendimento online, semipresencial e presencial. A modalidade escolhida acompanha o plano quando você chamar no WhatsApp.",
+    },
+    {
+      q: "Onde é o atendimento?",
+      a: "O atendimento apresentado neste site é em Rio Branco, AC.",
+    },
+    {
+      q: "Como escolho entre online, semipresencial e presencial?",
+      a: "Cada modalidade atende a uma rotina diferente. Você escolhe a opção no card do plano ou no formulário de contato, e a escolha já vai junto na mensagem do WhatsApp.",
+    },
+    {
+      q: "O treino é realmente personalizado?",
+      a: "A proposta do serviço é montar o protocolo a partir do objetivo, histórico, limitações e rotina do aluno, em vez de usar uma planilha igual para todo mundo.",
+    },
+    {
+      q: "O que acontece depois que eu clico em um botão?",
+      a: "Você vai direto para o WhatsApp com uma mensagem pronta. Assim, a conversa continua com Lucas sem precisar preencher um cadastro longo.",
+    },
+  ];
+
   return (
     <section
-      className="py-24 md:py-36 px-6 md:px-16"
-      style={{ background: "#080808" }}
+      id="faq"
+      className="py-24 md:py-32 px-6 md:px-16"
+      style={{ background: "#0b0b0b" }}
     >
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         <FadeUp>
-          <div className="flex items-center gap-3 mb-16">
-            <div className="w-5 h-px" style={{ background: "#c8ff00" }} />
-            <span
+          <div className="text-center mb-14">
+            <div className="flex justify-center">
+              <Label>Perguntas frequentes</Label>
+            </div>
+            <h2
               style={{
-                color: "#c8ff00",
                 fontFamily: "'Barlow Condensed', sans-serif",
-                fontSize: "0.7rem",
-                fontWeight: 700,
-                letterSpacing: "0.22em",
+                fontSize: "clamp(3rem, 7vw, 5.5rem)",
+                fontWeight: 900,
+                lineHeight: 0.92,
               }}
             >
-              GALERIA
-            </span>
+              ANTES DE
+              <br />
+              <span style={{ color: "#c8ff00" }}>COMEÇAR</span>
+            </h2>
           </div>
         </FadeUp>
 
-        <div
-          className="grid grid-cols-12 grid-rows-2 gap-4"
-          style={{ height: "clamp(380px, 62vw, 620px)" }}
-        >
-          <FadeUp className="col-span-12 md:col-span-5 row-span-2 overflow-hidden">
-            <div className="relative w-full h-full overflow-hidden group">
-              <img
-                src={IMG.gallery1}
-                alt="Lucas treinando"
-                className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
-                style={{ filter: "brightness(0.65)" }}
-              />
-              <div className="absolute bottom-8 left-8">
-                <div
-                  style={{
-                    fontFamily: "'Barlow Condensed', sans-serif",
-                    fontSize: "3.5rem",
-                    fontWeight: 900,
-                    color: "#c8ff00",
-                    opacity: 0.9,
-                    lineHeight: 1,
-                  }}
-                >
-                  +500
-                </div>
-                <div
-                  style={{
-                    color: "#888",
-                    fontFamily: "'Barlow Condensed', sans-serif",
-                    fontSize: "0.7rem",
-                    letterSpacing: "0.1em",
-                  }}
-                >
-                  VIDAS TRANSFORMADAS
-                </div>
-              </div>
-            </div>
-          </FadeUp>
+        <div className="flex flex-col gap-2">
+          {questions.map((item, index) => {
+            const isOpen = open === index;
 
-          <FadeUp
-            delay={0.1}
-            className="col-span-12 md:col-span-7 row-span-1 overflow-hidden"
-          >
-            <div className="relative w-full h-full overflow-hidden group">
-              <img
-                src={IMG.gallery2}
-                alt="Treino"
-                className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
-                style={{ filter: "brightness(0.5)" }}
-              />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span
-                  style={{
-                    fontFamily: "'Barlow Condensed', sans-serif",
-                    fontWeight: 900,
-                    fontSize: "clamp(3rem, 7vw, 6rem)",
-                    color: "transparent",
-                    WebkitTextStroke: "1px rgba(200,255,0,0.25)",
-                    letterSpacing: "-0.02em",
-                  }}
+            return (
+              <FadeUp key={item.q} delay={index * 0.04}>
+                <div
+                  style={{ border: "1px solid #191919", background: "#0f0f0f" }}
                 >
-                  EVOLUA
-                </span>
-              </div>
-            </div>
-          </FadeUp>
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between gap-6 text-left"
+                    onClick={() => setOpen(isOpen ? null : index)}
+                    aria-expanded={isOpen}
+                    style={{
+                      padding: "22px 24px",
+                      color: "#f5f5f5",
+                      fontFamily: "'Barlow Condensed', sans-serif",
+                      fontWeight: 900,
+                      fontSize: "1rem",
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    <span>{item.q}</span>
+                    <span
+                      style={{
+                        color: "#c8ff00",
+                        fontSize: "1.3rem",
+                        lineHeight: 1,
+                        transform: isOpen ? "rotate(45deg)" : "rotate(0deg)",
+                        transition: "transform 0.25s",
+                      }}
+                    >
+                      +
+                    </span>
+                  </button>
 
-          <FadeUp
-            delay={0.2}
-            className="col-span-12 md:col-span-7 row-span-1 overflow-hidden"
-          >
-            <div className="w-full h-full grid grid-cols-2 gap-4">
-              <div className="overflow-hidden group">
-                <img
-                  src={IMG.gallery3}
-                  alt="Atleta"
-                  className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
-                  style={{ filter: "brightness(0.5)" }}
-                />
-              </div>
-              <div
-                className="flex flex-col items-center justify-center gap-2"
-                style={{ background: "#c8ff00" }}
-              >
-                <div
-                  style={{
-                    fontFamily: "'Barlow Condensed', sans-serif",
-                    fontWeight: 900,
-                    fontSize: "clamp(1.4rem, 2.5vw, 2rem)",
-                    color: "#080808",
-                    lineHeight: 1.05,
-                    textAlign: "center",
-                  }}
-                >
-                  5 ANOS DE
-                  <br />
-                  EXCELÊNCIA
+                  <div
+                    style={{
+                      maxHeight: isOpen ? "500px" : "0px",
+                      overflow: "hidden",
+                      transition: "max-height 0.35s ease",
+                    }}
+                  >
+                    <p
+                      style={{
+                        color: "#555",
+                        fontSize: "0.85rem",
+                        lineHeight: 1.8,
+                        padding: "0 24px 24px",
+                        maxWidth: "760px",
+                      }}
+                    >
+                      {item.a}
+                    </p>
+                  </div>
                 </div>
-                <div
-                  style={{
-                    fontFamily: "'Barlow Condensed', sans-serif",
-                    fontSize: "0.62rem",
-                    fontWeight: 700,
-                    color: "rgba(8,8,8,0.5)",
-                    letterSpacing: "0.12em",
-                  }}
-                >
-                  SÃO PAULO · SP
-                </div>
-              </div>
-            </div>
-          </FadeUp>
+              </FadeUp>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -1869,12 +2883,13 @@ function CTAFinal() {
               lineHeight: 1.7,
             }}
           >
-            Seu próximo nível começa com o primeiro treino.
+            Seu próximo nível começa com uma conversa clara sobre seu objetivo,
+            sua rotina e o que faz sentido para você.
           </p>
           <a
-            href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
+            href={whatsappLink(
               "Olá, Lucas! Tenho interesse em começar meu treinamento. Gostaria de saber mais detalhes.",
-            )}`}
+            )}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-4 transition-all duration-300"
@@ -1919,17 +2934,17 @@ function Contato() {
   const [sent, setSent] = useState(false);
   const [form, setForm] = useState({
     nome: "",
+    modalidade: "",
     plano: "",
+    objetivo: "",
   });
 
-  const handle = (e: React.FormEvent) => {
+  const handle = (e: FormEvent) => {
     e.preventDefault();
 
-    const message = `Olá, Lucas! Vim pelo seu site e gostaria de fazer uma avaliação.\n\nNome: ${form.nome}\nPlano de interesse: ${form.plano}`;
+    const message = `Olá, Lucas! Vim pelo seu site e gostaria de conhecer o treinamento.\n\nNome: ${form.nome}\nModalidade: ${form.modalidade}\nPlano de interesse: ${form.plano}\nObjetivo: ${form.objetivo}`;
 
-    const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
-      message,
-    )}`;
+    const whatsappUrl = whatsappLink(message);
 
     window.open(whatsappUrl, "_blank");
 
@@ -1967,8 +2982,9 @@ function Contato() {
               marginBottom: "40px",
             }}
           >
-            Preencha seu nome e escolha o plano de interesse. Ao enviar, você
-            será direcionado para o WhatsApp.
+            Preencha seu nome, escolha a modalidade, o plano e seu objetivo. Ao
+            enviar, o WhatsApp já receberá tudo organizado para o primeiro
+            atendimento.
           </p>
           <div className="flex flex-col gap-5">
             {[
@@ -1990,7 +3006,7 @@ function Contato() {
             ].map(({ icon, label, val }) => (
               <div key={label} className="flex items-center gap-5">
                 <div
-                  className="flex-shrink-0 flex items-center justify-center text-base"
+                  className="shrink-0 flex items-center justify-center text-base"
                   style={{
                     width: "40px",
                     height: "40px",
@@ -2012,8 +3028,32 @@ function Contato() {
                   >
                     {label}
                   </div>
-                  <div style={{ color: "#f5f5f5", fontSize: "0.9rem" }}>
-                    {val}
+                  <div
+                    style={{
+                      color: "#f5f5f5",
+                      fontSize: "0.9rem",
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    {label === "WHATSAPP" ? (
+                      <a
+                        href={whatsappLink("Olá, Lucas! Vim pelo seu site.")}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {val}
+                      </a>
+                    ) : label === "INSTAGRAM" ? (
+                      <a
+                        href={INSTAGRAM_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {val}
+                      </a>
+                    ) : (
+                      val
+                    )}
                   </div>
                 </div>
               </div>
@@ -2102,15 +3142,57 @@ function Contato() {
                   />
                 </div>
               ))}
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="modalidade-contato"
+                  style={{
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    fontSize: "0.65rem",
+                    fontWeight: 900,
+                    color: "#444",
+                    letterSpacing: "0.14em",
+                  }}
+                >
+                  MODALIDADE
+                </label>
+                <select
+                  id="modalidade-contato"
+                  required
+                  value={form.modalidade}
+                  onChange={(e) =>
+                    setForm({ ...form, modalidade: e.target.value })
+                  }
+                  style={{
+                    background: "#080808",
+                    border: "1px solid #1e1e1e",
+                    color: form.modalidade ? "#f5f5f5" : "#444",
+                    fontFamily: "'Barlow', sans-serif",
+                    fontSize: "0.88rem",
+                    padding: "14px 16px",
+                    outline: "none",
+                    transition: "border-color 0.2s",
+                  }}
+                  onFocus={(e) =>
+                    (e.currentTarget.style.borderColor = "#c8ff00")
+                  }
+                  onBlur={(e) =>
+                    (e.currentTarget.style.borderColor = "#1e1e1e")
+                  }
+                >
+                  <option value="" disabled>
+                    Escolha como quer treinar...
+                  </option>
+                  <option value="Online">Online</option>
+                  <option value="Semipresencial">Semipresencial</option>
+                  <option value="Presencial">Presencial</option>
+                </select>
+              </div>
+
               {[
                 {
                   id: "plano",
                   label: "PLANO DE INTERESSE",
-                  opts: [
-                    "Starter (R$ 290/mês)",
-                    "Pro (R$ 490/mês)",
-                    "Elite (R$ 790/mês)",
-                  ],
+                  opts: ["Starter", "Pro", "Elite"],
                 },
               ].map(({ id, label, opts }) => (
                 <div key={id} className="flex flex-col gap-2">
@@ -2159,6 +3241,67 @@ function Contato() {
                   </select>
                 </div>
               ))}
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="objetivo"
+                  style={{
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    fontSize: "0.65rem",
+                    fontWeight: 900,
+                    color: "#444",
+                    letterSpacing: "0.14em",
+                  }}
+                >
+                  OBJETIVO PRINCIPAL
+                </label>
+                <select
+                  id="objetivo"
+                  required
+                  value={form.objetivo}
+                  onChange={(e) =>
+                    setForm({ ...form, objetivo: e.target.value })
+                  }
+                  style={{
+                    background: "#080808",
+                    border: "1px solid #1e1e1e",
+                    color: form.objetivo ? "#f5f5f5" : "#444",
+                    fontFamily: "'Barlow', sans-serif",
+                    fontSize: "0.88rem",
+                    padding: "14px 16px",
+                    outline: "none",
+                    transition: "border-color 0.2s",
+                  }}
+                  onFocus={(e) =>
+                    (e.currentTarget.style.borderColor = "#c8ff00")
+                  }
+                  onBlur={(e) =>
+                    (e.currentTarget.style.borderColor = "#1e1e1e")
+                  }
+                >
+                  <option value="" disabled>
+                    Selecione...
+                  </option>
+                  <option value="Emagrecimento">Emagrecimento</option>
+                  <option value="Hipertrofia">Hipertrofia</option>
+                  <option value="Condicionamento">Condicionamento</option>
+                  <option value="Performance">Performance</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </div>
+              <div
+                style={{
+                  color: "#333",
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontSize: "0.6rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.12em",
+                  lineHeight: 1.6,
+                }}
+              >
+                Ao enviar, o site abre o WhatsApp com seus dados e preferências
+                já preenchidos.
+              </div>
+
               <button
                 type="submit"
                 className="mt-3 transition-all duration-200"
@@ -2180,13 +3323,55 @@ function Contato() {
                   e.currentTarget.style.transform = "";
                 }}
               >
-                QUERO MINHA AVALIAÇÃO GRATUITA
+                QUERO SABER MAIS
               </button>
             </form>
           )}
         </FadeUp>
       </div>
     </section>
+  );
+}
+
+// ─── WhatsApp flutuante ─────────────────────────────────────────────────────
+function WhatsAppFloat() {
+  return (
+    <a
+      href={whatsappLink(
+        "Olá, Lucas! Vim pelo site e gostaria de saber mais sobre o treinamento.",
+      )}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Falar com Lucas pelo WhatsApp"
+      className="fixed right-4 bottom-4 sm:right-5 sm:bottom-5 z-40 flex items-center gap-3 transition-all duration-300"
+      style={{
+        background: "#c8ff00",
+        color: "#080808",
+        padding: "12px 16px",
+        boxShadow: "0 10px 35px rgba(200,255,0,0.18)",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-3px)";
+        e.currentTarget.style.boxShadow = "0 14px 45px rgba(200,255,0,0.32)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "";
+        e.currentTarget.style.boxShadow = "0 10px 35px rgba(200,255,0,0.18)";
+      }}
+    >
+      <FaWhatsapp size={20} />
+      <span
+        className="hidden sm:block"
+        style={{
+          fontFamily: "'Barlow Condensed', sans-serif",
+          fontWeight: 900,
+          fontSize: "0.72rem",
+          letterSpacing: "0.1em",
+        }}
+      >
+        FALAR NO WHATSAPP
+      </span>
+    </a>
   );
 }
 
@@ -2198,7 +3383,9 @@ function Footer() {
     { label: "Método", href: "#metodo" },
     { label: "Treinos", href: "#treinos" },
     { label: "Resultados", href: "#resultados" },
+    { label: "Modalidades", href: "#modalidades" },
     { label: "Planos", href: "#planos" },
+    { label: "FAQ", href: "#faq" },
     { label: "Contato", href: "#contato" },
   ];
 
@@ -2299,8 +3486,8 @@ function Footer() {
             <div className="flex flex-col gap-4">
               {[
                 { label: "Instagram", val: "@lucasferreira.pt" },
-                { label: "WhatsApp", val: "+55 (11) 99999-0000" },
-                { label: "E-mail", val: "lucas@lucasferreira.com" },
+                { label: "WhatsApp", val: "+55 (68) 99240-3062" },
+                { label: "Localização", val: "Rio Branco, AC" },
               ].map(({ label, val }) => (
                 <div key={label}>
                   <div
@@ -2315,7 +3502,39 @@ function Footer() {
                     {label}
                   </div>
                   <div style={{ color: "#555", fontSize: "0.85rem" }}>
-                    {val}
+                    {label === "Instagram" ? (
+                      <a
+                        href={INSTAGRAM_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ transition: "color 0.2s" }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.color = "#c8ff00")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.color = "#555")
+                        }
+                      >
+                        {val}
+                      </a>
+                    ) : label === "WhatsApp" ? (
+                      <a
+                        href={whatsappLink("Olá, Lucas! Vim pelo seu site.")}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ transition: "color 0.2s" }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.color = "#c8ff00")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.color = "#555")
+                        }
+                      >
+                        {val}
+                      </a>
+                    ) : (
+                      val
+                    )}
                   </div>
                 </div>
               ))}
@@ -2353,23 +3572,38 @@ function Footer() {
 export default function App() {
   return (
     <div
+      className="min-h-screen overflow-x-hidden selection:bg-[#c8ff00] selection:text-[#080808]"
       style={{
         background: "#080808",
         color: "#f5f5f5",
         fontFamily: "'Barlow', sans-serif",
       }}
     >
+      <style>{`
+        html { scroll-behavior: smooth; }
+        [id] { scroll-margin-top: 92px; }
+        button, a, select, input { -webkit-tap-highlight-color: transparent; }
+        ::selection { background: #c8ff00; color: #080808; }
+        @media (prefers-reduced-motion: reduce) {
+          html { scroll-behavior: auto; }
+        }
+      `}</style>
       <Navbar />
       <Hero />
+      <PerfilIdeal />
       <Sobre />
+      <Credibilidade />
       <Metodo />
+      <ComoFunciona />
       <Treinos />
       <Resultados />
+      <Modalidades />
       <Planos />
-      <Galeria />
+      <FAQ />
       <CTAFinal />
       <Contato />
       <Footer />
+      <WhatsAppFloat />
     </div>
   );
 }
